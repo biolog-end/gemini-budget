@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gemini-budget"
+version = "0.2.0"
+description = "Shared per-key Gemini API quota counters and an editable free-model profile across projects."
+requires-python = ">=3.9"
+dependencies = []
+
+[project.scripts]
+gemini-budget = "gemini_budget.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["gemini_budget*"]
