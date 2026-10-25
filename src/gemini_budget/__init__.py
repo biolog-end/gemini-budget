@@ -1,9 +1,13 @@
-"""Общие квоты Gemini для независимых проектов текущего пользователя."""
+"""Общие квоты и каталог моделей Gemini для независимых проектов текущего пользователя."""
 
-from .catalog import DEFAULT_LIMITS, MODEL_LABELS, MODEL_TASKS, CHAT_MODEL_IDS, PROFILE_DATE, PROFILE_SOURCE, has_free_quota
-from .core import canonical_model, correct, fingerprint, finish, import_legacy, reserve, snapshots, state_path
+from .catalog import (CHAT_MODEL_IDS, DEFAULT_CHAT_MODEL, DEFAULT_LIMITS, LIGHT_CHAT_MODEL, MODEL_LABELS,
+                      MODEL_TASKS, MODELS, PRICES_CHECKED, PROFILE_DATE, PROFILE_SOURCE, RETIRED_MODELS,
+                      base_model, has_free_quota, is_retired, is_text_model, model_info, supports_thinking,
+                      thinking_style)
+from .core import (canonical_model, clear_pause, correct, fingerprint, finish, import_legacy, reserve,
+                   snapshots, state_path)
 
-__version__ = '0.2.0'
+__version__ = '0.3.0'
 
 
 def status(key, model=None, *, state_file=None):
@@ -26,14 +30,23 @@ def limits(model, key=None, *, state_file=None):
 
 
 def models(key=None, *, task=None, state_file=None):
-    """Профиль с типами задач и лимитами; task='chat'/'tts'/'transcription'."""
-    configured = {row['model']: row['limits'] for row in status(key, state_file=state_file)} if key is not None else DEFAULT_LIMITS
-    return [{'id': model, 'label': MODEL_LABELS[model],
-             'task': MODEL_TASKS[model],
-             'free_tier': all(cap is None or cap > 0 for cap in configured[model].values()),
-             'limits': dict(configured[model]), 'profile_date': PROFILE_DATE,
-             'profile_source': PROFILE_SOURCE} for model in DEFAULT_LIMITS
-            if task is None or MODEL_TASKS[model] == task]
+    """Каталог: квоты (с правками ключа, если он указан), цены и возможности моделей.
+
+    task: 'chat', 'tts', 'transcription', 'embedding', 'live', 'agent', 'image', … или None.
+    """
+    configured = {row['model']: row['limits'] for row in status(key, state_file=state_file)} \
+        if key is not None else DEFAULT_LIMITS
+    rows = []
+    for entry in MODELS:
+        if task is not None and entry['task'] != task:
+            continue
+        info = model_info(entry['id'])
+        quota = configured.get(entry['id'])
+        rows.append({**info, 'limits': dict(quota) if quota is not None else None,
+                     'in_profile': entry['id'] in DEFAULT_LIMITS,
+                     'free_tier': quota is not None and all(cap is None or cap > 0 for cap in quota.values()),
+                     'profile_date': PROFILE_DATE, 'profile_source': PROFILE_SOURCE})
+    return rows
 
 
 def free_models(key=None, *, task='chat', state_file=None):
@@ -41,6 +54,8 @@ def free_models(key=None, *, task='chat', state_file=None):
     return [row for row in models(key, task=task, state_file=state_file) if row['free_tier']]
 
 
-__all__ = ['DEFAULT_LIMITS', 'CHAT_MODEL_IDS', 'PROFILE_DATE', 'PROFILE_SOURCE', 'canonical_model',
-           'correct', 'fingerprint', 'finish', 'free_models', 'import_legacy',
-           'limits', 'models', 'reserve', 'snapshots', 'state_path', 'status', 'has_free_quota']
+__all__ = ['CHAT_MODEL_IDS', 'DEFAULT_CHAT_MODEL', 'DEFAULT_LIMITS', 'LIGHT_CHAT_MODEL', 'MODELS',
+           'PRICES_CHECKED', 'PROFILE_DATE', 'PROFILE_SOURCE', 'RETIRED_MODELS', 'base_model',
+           'canonical_model', 'clear_pause', 'correct', 'fingerprint', 'finish', 'free_models',
+           'has_free_quota', 'import_legacy', 'is_retired', 'is_text_model', 'limits', 'model_info',
+           'models', 'reserve', 'snapshots', 'state_path', 'status', 'supports_thinking', 'thinking_style']

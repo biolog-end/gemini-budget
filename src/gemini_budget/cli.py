@@ -4,13 +4,13 @@ import argparse
 import json
 import os
 
-from . import free_models, state_path, status
+from . import MODEL_TASKS, free_models, state_path, status
 
 
 def main():
     parser = argparse.ArgumentParser(description='Общие локальные лимиты Gemini')
     parser.add_argument('command', choices=('models', 'status', 'path'), nargs='?', default='models')
-    parser.add_argument('--task', choices=('chat', 'tts', 'transcription'), default='chat')
+    parser.add_argument('--task', choices=sorted(set(MODEL_TASKS.values())), default='chat')
     args = parser.parse_args()
     if args.command == 'path':
         print(state_path())

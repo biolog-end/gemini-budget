@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 import os
 from pathlib import Path
 
-from .catalog import DEFAULT_LIMITS
+from .catalog import DEFAULT_LIMITS, MODELS_BY_ID
 from .storage import file_lock, read_json, write_json
 
 
@@ -66,9 +66,20 @@ def _row(data, key, model, now):
     return _normalize_row(row, model, now)
 
 
+def _default_limits(model):
+    return dict(DEFAULT_LIMITS.get(model) or {'rpm': None, 'tpm': None, 'rpd': None})
+
+
+def _custom_limits(row):
+    # Строки v0.2 без флага: правленные вручную лимиты не трогаем.
+    return row.get('custom_limits', bool(row.get('revision')))
+
+
 def _normalize_row(row, model, now):
-    row.setdefault('limits', DEFAULT_LIMITS.get(model, {'rpm': None, 'tpm': None, 'rpd': None}).copy())
     row.setdefault('revision', 0)
+    if not _custom_limits(row):
+        # Лимиты без ручной правки следуют профилю, иначе его обновление не дойдёт до ключей.
+        row['limits'] = _default_limits(model)
     day, _ = _calendar(now)
     if row.get('day') != day:
         row.update(day=day, requests_today=0, successful_today=0)
@@ -134,7 +145,8 @@ def snapshots(keys, *, state_file=None):
         result = {}
         for entry in keys:
             existing = data['keys'].get(fingerprint(entry['key']), {}).get('models', {})
-            models = list(dict.fromkeys([*DEFAULT_LIMITS, *existing]))
+            custom = [model for model, row in existing.items() if _custom_limits(row)]
+            models = list(dict.fromkeys([*DEFAULT_LIMITS, *custom]))
             result[entry['id']] = [_view(_row(data, entry['key'], model, now), model, now)
                                     for model in models]
         return result
@@ -204,8 +216,8 @@ def finish(key, model, reservation, success=False, input_tokens=None, failure=No
 def correct(key, model, values, *, state_file=None):
     """Ручная коррекция одной строки, без потери запросов других процессов."""
     model = canonical_model(model)
-    if model not in DEFAULT_LIMITS:
-        raise ValueError('Ручная таблица содержит только модели с указанными бесплатными квотами.')
+    if model not in MODELS_BY_ID:
+        raise ValueError('Ручная таблица содержит только модели из каталога gemini_budget.')
     names = ('rpm', 'tpm', 'rpd', 'requests_today',
              'requests_last_minute', 'input_tokens_last_minute')
     parsed = {}
@@ -221,6 +233,7 @@ def correct(key, model, values, *, state_file=None):
         row = _row(data, key, model, now)
         pending_hits = [hit for hit in row['minute'] if hit.get('id') in row['pending']]
         row['limits'] = {name: parsed[name] for name in ('rpm', 'tpm', 'rpd')}
+        row['custom_limits'] = row['limits'] != _default_limits(model)
         row['requests_today'] = parsed['requests_today']
         row['successful_today'] = parsed['requests_today']
         row['minute'] = pending_hits
@@ -230,6 +243,23 @@ def correct(key, model, values, *, state_file=None):
         row.update(blocked_until=0, block_reason='', blocked_scope='', revision=row['revision'] + 1)
         write_json(state_file, data)
         return _view(row, model, now)
+
+
+def clear_pause(key, model=None, *, state_file=None):
+    """Снимает паузы после ответов Google: у одной модели ключа или у всех."""
+    state_file = str(state_file or state_path())
+    now = time.time()
+    with file_lock(state_file):
+        data = _load(state_file)
+        models = data['keys'].get(fingerprint(key), {}).get('models', {})
+        changed = False
+        for name, row in models.items():
+            if (model is None or name == canonical_model(model)) and row.get('blocked_until', 0) > now:
+                row.update(blocked_until=0, block_reason='', blocked_scope='')
+                changed = True
+        if changed:
+            write_json(state_file, data)
+        return changed
 
 
 def import_legacy(path, *, state_file=None):
