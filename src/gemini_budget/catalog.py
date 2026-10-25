@@ -12,6 +12,7 @@ import re
 PROFILE_DATE = '2026-10-25'
 PROFILE_SOURCE = 'user_ai_studio'
 PRICES_CHECKED = '2026-09-18'
+LIVE_PROBED = '2026-10-25'  # Что реально вернула models.list() + бесплатные тесты.
 
 _FLASH = {'rpm': 5, 'tpm': 250_000, 'rpd': 20}
 _LITE = {'rpm': 15, 'tpm': 250_000, 'rpd': 500}
@@ -52,8 +53,9 @@ MODELS = [
     _chat('gemini-3-flash-preview', 'Gemini 3 Flash', _FLASH, 0.50, 3.00, _LEVEL, family='3.x',
           status='preview', tier='strong', rank=3, note='Preview; Google рекомендует переход на 3.6/3.8 Flash.'),
     _chat('gemini-2.5-flash', 'Gemini 2.5 Flash', _FLASH, 0.30, 2.50, _BUDGET, family='2.5',
-          search='free', tier='strong', rank=4,
-          note='Доступ новых проектов к 2.5 может быть ограничен Google.'),
+          search='free', tier='strong', rank=4, status='legacy',
+          note='С 25.10.2026 Google убрал для новых проектов (404 «no longer available to new users»); '
+               'на старых проектах всё ещё работает. Замена: 3.8-flash или 3.6-flash.'),
     _chat('gemini-3.5-flash-lite', 'Gemini 3.5 Flash Lite', _LITE, 0.30, 2.50, _LEVEL, family='3.x',
           tier='light', rank=5, note='500 запросов в день — основной рабочий вариант для частых вызовов.'),
     _chat('gemini-3.1-flash-lite', 'Gemini 3.1 Flash Lite', _LITE, 0.25, 1.50, _LEVEL, family='3.x',
@@ -65,14 +67,17 @@ MODELS = [
           inputs=('text', 'image'), context=262_144, max_output=32_768, tier='light', rank=8,
           note='14 400 запросов в день, но всего 16 тыс. входных токенов в минуту. Без Google Search.'),
     _chat('gemini-2.5-flash-lite', 'Gemini 2.5 Flash Lite', {'rpm': 10, 'tpm': 250_000, 'rpd': 20},
-          0.10, 0.40, _BUDGET, family='2.5', search='free', tier='light', rank=9,
-          note='Доступ новых проектов к 2.5 может быть ограничен Google.'),
+          0.10, 0.40, _BUDGET, family='2.5', search='free', tier='light', rank=9, status='legacy',
+          note='С 25.10.2026 Google убрал для новых проектов (404 «no longer available to new users»); '
+               'на старых проектах работает. Замена: 3.5-flash-lite.'),
     _chat('gemini-4-argon', 'Gemini 4 Argon', _ZERO, None, None, _LEVEL, family='4', status='new',
           max_output=32_768, tier='paid', rank=10, note='Новое поколение; бесплатной квоты нет, цена не опубликована.'),
     _chat('gemini-3.1-pro-preview', 'Gemini 3.1 Pro', _ZERO, 2.00, 12.00, _LEVEL_PRO, family='3.x',
           status='preview', tier='paid', rank=11, note='Флагман; только платный проект.'),
     _chat('gemini-2.5-pro', 'Gemini 2.5 Pro', _ZERO, 1.25, 10.00, _BUDGET_PRO, family='2.5',
-          tier='paid', rank=12, note='Только платный проект.'),
+          tier='paid', rank=12, status='legacy',
+          note='С 25.10.2026 Google убрал для новых проектов (404 «no longer available to new users»); '
+               'на старых проектах — только за деньги. Замена: 3.1-pro-preview.'),
     _chat('gemini-3.7-flash', 'Gemini 3.7 Flash', None, 0.75, 3.75, _LEVEL, family='3.x',
           tier='paid', rank=13, note='С 25.10.2026 нет в таблице бесплатных квот; API модель ещё отдаёт.'),
     _chat('gemini-3.5-flash', 'Gemini 3.5 Flash', None, 1.50, 9.00, _LEVEL, family='3.x',
@@ -108,8 +113,51 @@ MODELS = [
     _other('gemini-3.1-flash-lite-image', 'Nano Banana 2 Lite', 'image', _ZERO),
     _other('gemini-nano-banana-2.1', 'Gemini Nano Banana 2.1', 'image', _ZERO),
     _other('gemini-omni-1.1-flash', 'Gemini Omni 1.1 Flash', 'multimodal', _ZERO),
-    _other('lyria-3-clip-preview', 'Lyria 3 Clip', 'music', _ZERO, status='preview'),
-    _other('lyria-3-pro-preview', 'Lyria 3 Pro', 'music', _ZERO, status='preview'),
+    _other('lyria-3-clip-preview', 'Lyria 3 Clip', 'music', _ZERO, status='preview',
+           note='Генерация музыки; бесплатных лимитов нет (free_tier_requests=0).'),
+    _other('lyria-3-pro-preview', 'Lyria 3 Pro', 'music', _ZERO, status='preview',
+           note='Генерация музыки; бесплатных лимитов нет.'),
+    _other('lyria-3.5', 'Lyria 3.5', 'music', _ZERO,
+           note='Генерация музыки; бесплатных лимитов нет.'),
+    _other('lyria-realtime-exp', 'Lyria Realtime', 'music', _ZERO, status='preview',
+           note='Генерация музыки через Live API (bidiGenerateMusic).'),
+
+    _other('nano-banana-pro-preview', 'Nano Banana Pro (preview id)', 'image', _ZERO,
+           note='Preview-алиас gemini-3-pro-image.'),
+
+    # Preview-снапшоты родительских моделей (lookup через base_model).
+    _other('antigravity-preview-05-2026', 'Antigravity 05-2026', 'agent',
+           {'rpm': 60, 'tpm': 100_000, 'rpd': 100}, status='preview'),
+    _other('antigravity-preview-09-2026', 'Antigravity 09-2026', 'agent',
+           {'rpm': 60, 'tpm': 100_000, 'rpd': 100}, status='preview'),
+    _other('deep-research-preview-04-2026', 'Deep Research Preview', 'agent', _ZERO, status='preview'),
+    _other('deep-research-max-preview-04-2026', 'Deep Research Max Preview', 'agent', _ZERO,
+           status='preview'),
+    _other('gemini-2.5-flash-native-audio-preview-09-2025', 'Native Audio Dialog 09-2025', 'live',
+           {'rpm': None, 'tpm': 1_000_000, 'rpd': None}, status='preview'),
+    _other('gemini-2.5-flash-native-audio-preview-12-2025', 'Native Audio Dialog 12-2025', 'live',
+           {'rpm': None, 'tpm': 1_000_000, 'rpd': None}, status='preview'),
+    _other('gemini-robotics-er-2-streaming-preview', 'Gemini Robotics ER 2 Streaming', 'robotics',
+           _FLASH, status='preview', note='Live API (bidiGenerateContent).'),
+    _other('gemini-embedding-2-preview', 'Gemini Embedding 2 Preview', 'embedding', _EMBEDDING,
+           status='preview'),
+    _other('gemini-omni-flash-preview', 'Gemini Omni Flash Preview', 'multimodal', _ZERO,
+           status='preview'),
+
+    # Алиасы «latest» — Google крутит их к текущей рекомендуемой версии.
+    _chat('gemini-flash-latest', 'Gemini Flash (alias)', _FLASH, 0.75, 3.75, _LEVEL, family='alias',
+          tier='strong', rank=50,
+          note='Алиас Google: сейчас указывает на 3.8-flash. Для стабильного поведения — '
+               'лучше использовать точечный id.'),
+    _chat('gemini-flash-lite-latest', 'Gemini Flash Lite (alias)', _LITE, 0.30, 2.50, _LEVEL,
+          family='alias', tier='light', rank=51,
+          note='Алиас Google: сейчас указывает на 3.5-flash-lite. Квоты зависят от текущей цели.'),
+    _chat('gemini-pro-latest', 'Gemini Pro (alias)', _ZERO, 2.00, 12.00, _LEVEL_PRO, family='alias',
+          tier='paid', rank=52,
+          note='Алиас Google: сейчас указывает на 3.1-pro-preview. Бесплатных лимитов нет.'),
+
+    _other('aqa', 'Attributed Question-Answering', 'qa', _ZERO,
+           note='Старое API generateAnswer; не для переписки.'),
 ]
 
 # Отключены Google: обращение вернёт 404.

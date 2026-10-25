@@ -195,7 +195,7 @@ class SharedUsageTests(unittest.TestCase):
         models = gb.free_models()
         self.assertEqual({row['id'] for row in models},
                          {model for model in gb.CHAT_MODEL_IDS if gb.has_free_quota(model)})
-        self.assertEqual(len(models), 9)
+        self.assertEqual(len(models), 11)
         self.assertEqual(len(gb.free_models(task='tts')), 4)
         self.assertEqual(len(gb.free_models(task='transcription')), 2)
         models[0]['limits']['rpd'] = 9999
